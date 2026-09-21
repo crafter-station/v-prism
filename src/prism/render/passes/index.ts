@@ -1,8 +1,8 @@
-import { draw, effect, geometry, sampler, type Draw, type Effect, type Gpu } from "vgpu";
+import { draw, effect, geometry, sampler, type Draw, type Effect, type Gpu, type Surface } from "vgpu";
 import type { Texture } from "vgpu/core";
 import type { Mesh } from "../../geometry/tetrahedron";
 import { createQuad, createSprites, type Sprites } from "../sprites";
-import { HDR, type Targets } from "../targets";
+import type { Targets } from "../targets";
 import beamWgsl from "./beam.wgsl";
 import bloomDownWgsl from "./bloom-down.wgsl";
 import bloomExtractWgsl from "./bloom-extract.wgsl";
@@ -127,21 +127,15 @@ export function bindTargets(passes: Passes, targets: Targets, radius: number): v
   passes.present.set({ scene: targets.lit, bloom, presentSampler: samp });
 }
 
-export async function compilePasses(
-  passes: Passes,
-  targets: Targets,
-  output: { format: GPUTextureFormat },
-): Promise<void> {
+export async function compilePasses(passes: Passes, targets: Targets, output: Surface): Promise<void> {
   await Promise.all([
-    passes.beam.compile(targets.scene),
-    passes.beamLine.compile(targets.scene),
-    ...passes.rainbows.map((r) => r.compile(targets.scene)),
-    passes.glass.compile(targets.lit),
-    passes.flare.compile(targets.lit),
-    passes.copy.compile(targets.lit),
-    passes.extract.compile({ colors: [HDR] }),
-    ...passes.down.map((d) => d.compile({ colors: [HDR] })),
-    ...passes.up.map((u) => u.compile({ colors: [HDR] })),
+    ...passes.rainbows.map((rainbow) => rainbow.compile(targets.scene)),
+    ...[passes.copy, passes.beam, passes.beamLine, passes.flare, passes.glass].map((pass) =>
+      pass.compile(targets.lit),
+    ),
+    passes.extract.compile(targets.down[0]),
+    ...passes.down.map((down, i) => down.compile(targets.down[i + 1])),
+    ...passes.up.map((up, i) => up.compile(targets.up[i])),
     passes.present.compile({ colors: [output.format] }),
   ]);
 }
