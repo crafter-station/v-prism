@@ -111,4 +111,4 @@ agent-browser --session prism --webgpu errors
 
 The pmndrs [`nextjs-prism`](https://github.com/pmndrs/examples/tree/main/examples/nextjs-prism)
 example (MIT) for the concept and the film LUT, AlanZucconi's spectral rainbow and JuliaPoo's
-iridescence for the rainbow shader. The screenshot sits on Raycast's Red Distortion wallpaper.
+iridescence for the rainbow shader.
