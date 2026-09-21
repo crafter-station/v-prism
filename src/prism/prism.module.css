@@ -28,17 +28,3 @@
   cursor: crosshair;
   touch-action: none;
 }
-
-.notice {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  z-index: 20;
-  max-width: 28ch;
-  margin: 0;
-  transform: translate(-50%, -50%);
-  text-align: center;
-  color: var(--muted);
-  font-size: 14px;
-  line-height: 1.5;
-}

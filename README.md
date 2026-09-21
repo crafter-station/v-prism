@@ -27,8 +27,14 @@ npm run dev
 npm run build && npm start
 ```
 
-Needs a browser with WebGPU (current Chrome, Edge, Safari 26, Firefox 141+ on Windows). Without
-it the page shows a short notice instead of the canvas.
+Needs a browser with WebGPU: current Chrome, Edge and Safari 26 on desktop, Safari on iOS 26,
+Chrome on Android 12+, Firefox 141+ on Windows. Without it the page shows a still frame from the
+renderer and says why: the browser has no WebGPU, WebGPU is switched off for the GPU, the page is
+not a secure origin, or the renderer hit an error (shown as is).
+
+WebGPU only exists on secure origins, so a phone opening the dev server by LAN IP
+(`http://192.168.x.x:3000`) never gets it. Test phones on a deployment instead: every push gets
+an HTTPS preview URL.
 
 ## How it renders
 
@@ -75,11 +81,12 @@ src/prism/render/passes/    one WGSL file per pass and the TypeScript that binds
 src/prism/render/shaders/   shared WGSL modules: studio environment, spectrum, glare curves
 src/prism/render/targets.ts render targets and the bloom chain
 src/prism/render/lut.ts     KTX2 reader for the film LUT
+src/prism/render/support.ts why WebGPU is unavailable, when it is
 src/prism/geometry/         rounded regular tetrahedron, its 24 symmetries, screen-space outline
 src/prism/optics/           symmetric rainbow optics (the original formula in prism space), drift
 src/prism/math/             vec3, quat, mat4, angles, 2D convex hull
 src/prism/state/            small store + settings and prism state (used by React and the renderer)
-src/prism/ui/               drawer, hint and GitHub link
+src/prism/ui/               drawer, hint, GitHub link, still-frame fallback
 src/prism/pointer.ts        aim and rotate gestures
 ```
 

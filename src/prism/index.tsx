@@ -3,7 +3,9 @@
 import { useEffect, useRef, useState } from "react";
 import { attachPointer } from "./pointer";
 import { createRenderer } from "./render/renderer";
+import { diagnose, type Failure } from "./render/support";
 import { Drawer } from "./ui/drawer";
+import { Fallback } from "./ui/fallback";
 import { Hint } from "./ui/hint";
 import { Source } from "./ui/source";
 import styles from "./prism.module.css";
@@ -11,14 +13,14 @@ import styles from "./prism.module.css";
 export function Prism() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
-  const [unsupported, setUnsupported] = useState(false);
+  const [failure, setFailure] = useState<Failure>();
 
   useEffect(() => {
     const canvas = canvasRef.current;
     const overlay = overlayRef.current;
     if (!canvas || !overlay) return;
     const renderer = createRenderer(canvas);
-    renderer.ready.catch(() => setUnsupported(true));
+    renderer.ready.catch((error: unknown) => diagnose(error).then(setFailure));
     const detach = attachPointer(overlay);
     return () => {
       detach();
@@ -34,15 +36,15 @@ export function Prism() {
           Click or drag anywhere to aim the light beam at the prism. Scroll to rotate the prism.
         </p>
       </div>
-      {unsupported ? (
-        <p className={styles.notice}>
-          This page needs WebGPU. Try a current version of Chrome, Edge or Safari.
-        </p>
+      {failure ? (
+        <Fallback failure={failure} />
       ) : (
-        <Hint />
+        <>
+          <Hint />
+          <Drawer />
+        </>
       )}
       <Source />
-      <Drawer />
     </main>
   );
 }
