@@ -1,36 +1,101 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# v-prism
 
-## Getting Started
+![A glass prism splitting a beam of light into a rainbow](.github/hero.png)
 
-First, run the development server:
+A glass prism that splits a beam of light into an animated rainbow, rendered on WebGPU with
+[vgpu](https://vgpu.sh) as the only rendering dependency. Live at
+[v-prism.crafter.run](https://v-prism.crafter.run).
+
+It rebuilds the three.js scene at [v-prism.vercel.app](https://v-prism.vercel.app) with Next.js 16
+(App Router, Turbopack), TypeScript and WGSL. No three.js, no other GPU library: `npm ls three`
+reports nothing.
+
+Click or drag to aim a light beam at a glass tetrahedron; it disperses into an animated rainbow.
+
+| Input | Does |
+| --- | --- |
+| Click / drag, one finger | Aim the beam |
+| Scroll | Tilt and turn the glass |
+| ⌥ + scroll | Spin it in the screen plane |
+| Pinch, ⌘/Ctrl + scroll | Zoom (0.4x to 4x) |
+| Two fingers on touch | Drag to tilt/turn, twist to spin, pinch to zoom |
+| Handle on the right edge | Opens the drawer: presets, light, glass, motion, zoom, reset |
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm run build && npm start
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Needs a browser with WebGPU (current Chrome, Edge, Safari 26, Firefox 141+ on Windows). Without
+it the page shows a short notice instead of the canvas.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## How it renders
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Everything is a `draw()` or `effect()` from vgpu, encoded into one `frame()` per tick:
 
-## Learn More
+| Pass | Target | Draws |
+| --- | --- | --- |
+| Scene | `scene` (rgba16float) | background clear, up to two rainbow quads (premultiplied); this is what the glass refracts |
+| Glass | `lit` (rgba16float, 4x MSAA) | copy of `scene`, beam sprites and lens flare (additive), then the glass, which covers them |
+| Bloom | 9 half-res levels | `smoothstep(1, 2, luminance)` threshold, 13-tap downsample chain, tent upsample mixed at 0.85 per level |
+| Present | canvas | `lit` + bloom, clipped, through the F-6800 film LUT (a 33³ `texture_3d`), to sRGB |
 
-To learn more about Next.js, take a look at the following resources:
+The glass shader refracts the beam plane into the `scene` texture in screen space (Snell through
+the glass thickness, three wavelengths for a hint of dispersion, a jittered disk for roughness),
+reflects a procedural studio evaluated analytically per direction (a gradient dome plus soft
+panels; the light preset uses the original three softboxes), and mixes them with a dielectric
+Fresnel plus a clearcoat term. There is no tone mapping, which is what the original pipeline did:
+it clipped, applied the LUT, and encoded to sRGB.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Glare matches the original lens-flare textures without shipping them: `shaders/glare.wgsl`
+holds each texture's measured brightness curve (radial for the glows and flare dots, along and
+across for the streak), and every sprite quad is cropped to where its curve is non-zero, so
+nothing ever ends in a visible square. Glare lives in the lens, not the scene, so the flare and
+the beam's glint and width keep their on-screen size at any zoom; like the original, the glass
+hides whatever glare falls behind it.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+The camera is an orthographic, pixel-space camera sized in CSS pixels (50 / 70 / 100 px per
+world unit by breakpoint, times the zoom); render targets follow the device pixel size, so a
+2x display renders at 2x without changing the framing. On resize every offscreen target is
+resized in place with vgpu's `target.resize()`; bindings made with the target follow
+automatically, so nothing is ever destroyed or rebound mid-flight.
 
-## Deploy on Vercel
+Rendering is on demand. The frame loop stops when nothing is animating; the idle drift keeps it
+alive by default, and `prefers-reduced-motion` turns the drift off.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Layout
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```
+src/app/                    Next.js shell: layout, page, global styles
+src/prism/index.tsx         client component: canvas, pointer overlay, hint, drawer
+src/prism/simulation.ts     per-tick state: aim, hit, rotation + drift, rainbow beams, fades
+src/prism/render/renderer.ts  vgpu context, surface, frame scheduling, resize, uniform writes
+src/prism/render/passes/    one WGSL file per pass and the TypeScript that binds it
+src/prism/render/shaders/   shared WGSL modules: studio environment, spectrum, glare curves
+src/prism/render/targets.ts render targets and the bloom chain
+src/prism/render/lut.ts     KTX2 reader for the film LUT
+src/prism/geometry/         rounded regular tetrahedron, its 24 symmetries, screen-space outline
+src/prism/optics/           symmetric rainbow optics (the original formula in prism space), drift
+src/prism/math/             vec3, quat, mat4, angles, 2D convex hull
+src/prism/state/            small store + settings and prism state (used by React and the renderer)
+src/prism/ui/               drawer and hint
+src/prism/pointer.ts        aim and rotate gestures
+```
+
+Shaders are validated with `npx vgpu check src/prism/render/passes/<pass>.wgsl`. Visual checks
+use [agent-browser](https://github.com/vercel-labs/agent-browser) with real WebGPU:
+
+```bash
+agent-browser --session prism --webgpu open http://localhost:3000
+agent-browser --session prism --webgpu set viewport 1440 900 2
+agent-browser --session prism --webgpu reload && agent-browser --session prism --webgpu wait 6000
+agent-browser --session prism --webgpu screenshot prism.png
+agent-browser --session prism --webgpu errors
+```
+
+## Credits
+
+The pmndrs [`nextjs-prism`](https://github.com/pmndrs/examples/tree/main/examples/nextjs-prism)
+example (MIT) for the concept and the film LUT, AlanZucconi's spectral rainbow and JuliaPoo's
+iridescence for the rainbow shader. The screenshot sits on Raycast's Ray of Lights wallpaper.
