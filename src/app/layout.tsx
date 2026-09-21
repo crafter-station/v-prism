@@ -2,9 +2,15 @@ import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 import "./globals.css";
 
+const title = "v-prism";
+const description = "A glass prism splitting light into a rainbow, rendered on WebGPU with vgpu.";
+
 export const metadata: Metadata = {
-  title: "Prism",
-  description: "A light beam through a glass prism, rendered with WebGPU.",
+  metadataBase: new URL("https://v-prism.crafter.run"),
+  title,
+  description,
+  openGraph: { title, description, url: "/", siteName: title, type: "website" },
+  twitter: { card: "summary_large_image", title, description },
 };
 
 export const viewport: Viewport = {
