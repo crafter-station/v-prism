@@ -79,7 +79,7 @@ src/prism/geometry/         rounded regular tetrahedron, its 24 symmetries, scre
 src/prism/optics/           symmetric rainbow optics (the original formula in prism space), drift
 src/prism/math/             vec3, quat, mat4, angles, 2D convex hull
 src/prism/state/            small store + settings and prism state (used by React and the renderer)
-src/prism/ui/               drawer and hint
+src/prism/ui/               drawer, hint and GitHub link
 src/prism/pointer.ts        aim and rotate gestures
 ```
 

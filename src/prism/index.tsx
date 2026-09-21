@@ -5,6 +5,7 @@ import { attachPointer } from "./pointer";
 import { createRenderer } from "./render/renderer";
 import { Drawer } from "./ui/drawer";
 import { Hint } from "./ui/hint";
+import { Source } from "./ui/source";
 import styles from "./prism.module.css";
 
 export function Prism() {
@@ -40,6 +41,7 @@ export function Prism() {
       ) : (
         <Hint />
       )}
+      <Source />
       <Drawer />
     </main>
   );
