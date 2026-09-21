@@ -67,6 +67,12 @@ world unit by breakpoint, times the zoom); render targets follow the device pixe
 resized in place with vgpu's `target.resize()`; bindings made with the target follow
 automatically, so nothing is ever destroyed or rebound mid-flight.
 
+Every pipeline is compiled at load against the exact target it draws into (format and sample
+count), as vgpu recommends, so a GPU that rejects one fails before the first frame and lands on
+the fallback with the pass name and the GPU's own message. The shaders avoid pipeline-overridable
+constants: Safari 26 cannot build the vertex function of a module compiled with one set
+(`Vertex library failed creation`), so the beam's line mode is a uniform instead.
+
 Rendering is on demand. The frame loop stops when nothing is animating; the idle drift keeps it
 alive by default, and `prefers-reduced-motion` turns the drift off.
 
