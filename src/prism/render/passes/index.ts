@@ -60,12 +60,7 @@ export function createPasses(gpu: Gpu, mesh: Mesh, levels: number): Passes {
 
   return {
     beam: draw(gpu, { ...beamOptions, blend: "additive", label: "beam" }),
-    beamLine: draw(gpu, {
-      ...beamOptions,
-      blend: "premultiplied",
-      constants: { LINE: true },
-      label: "beam-line",
-    }),
+    beamLine: draw(gpu, { ...beamOptions, blend: "premultiplied", label: "beam-line" }),
     beamSprites,
     rainbows: [0, 1].map((i) =>
       draw(gpu, {

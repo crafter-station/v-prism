@@ -125,6 +125,7 @@ function render({ gpu, output, targets, passes }: Stage, state: FrameState): voi
       streak: DARK_STREAK,
       glow: 1,
       glare,
+      line: state.light ? 1 : 0,
     },
   });
   const diagonal = Math.hypot(state.camera.width, state.camera.height) / state.camera.zoom + 1.5;

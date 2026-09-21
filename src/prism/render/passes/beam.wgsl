@@ -1,7 +1,5 @@
 import { beamGlow, streak } from "../shaders/glare.wgsl";
 
-override LINE: bool = false;
-
 const JOINT_FOOTPRINT = 0.5625;
 const LINE_TEXELS = 10.0;
 const LIGHT_LINE_TEXELS = 1.92;
@@ -12,6 +10,7 @@ struct Beam {
   streak: f32,
   glow: f32,
   glare: f32,
+  line: f32,
 }
 
 @group(0) @binding(0) var<uniform> beam: Beam;
@@ -48,7 +47,7 @@ fn vs_main(
 fn fs_main(in: VertexOut) -> @location(0) vec4f {
   let joint = in.kind > 0.5;
   let texels = abs(in.uv.y) * LINE_TEXELS;
-  if (LINE) {
+  if (beam.line > 0.5) {
     let edge = fwidth(texels);
     let coverage = select(1.0 - smoothstep(LIGHT_LINE_TEXELS - edge, LIGHT_LINE_TEXELS + edge, texels), 0.0, joint);
     let alpha = coverage * 0.7;
