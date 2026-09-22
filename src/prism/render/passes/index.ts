@@ -11,6 +11,7 @@ import {
 } from "vgpu";
 import type { Texture } from "vgpu/core";
 import type { Mesh } from "../../geometry/tetrahedron";
+import { palette } from "../light";
 import { createQuad, createSprites, type Sprites } from "../sprites";
 import type { Targets } from "../targets";
 import beamWgsl from "./beam.wgsl";
@@ -21,6 +22,7 @@ import copyWgsl from "./copy.wgsl";
 import flareWgsl from "./flare.wgsl";
 import glassWgsl from "./glass.wgsl";
 import glintsWgsl from "./glints.wgsl";
+import lightWgsl from "./light.wgsl";
 import presentWgsl from "./present.wgsl";
 import rainbowWgsl from "./rainbow.wgsl";
 
@@ -45,6 +47,7 @@ export interface Passes {
   readonly beamLine: Draw;
   readonly beamSprites: Sprites;
   readonly rainbows: readonly Draw[];
+  readonly light: Effect;
   readonly glass: Draw;
   readonly glints: Draw;
   readonly flare: Draw;
@@ -95,6 +98,7 @@ export function createPasses(gpu: Gpu, mesh: Mesh, levels: number, mirrorLevels:
         label: `rainbow-${i}`,
       }),
     ),
+    light: effect(gpu, lightWgsl, { blend: "additive", label: "light", set: { palette } }),
     glass: draw(gpu, { ...glassOptions, shader: glassWgsl, label: "glass" }),
     glints: draw(gpu, { ...glassOptions, shader: glintsWgsl, blend: "additive", label: "glints" }),
     flare: draw(gpu, {
@@ -118,7 +122,11 @@ export function createPasses(gpu: Gpu, mesh: Mesh, levels: number, mirrorLevels:
     present,
     linearSampler,
     useLut: (lut, size) =>
-      present.set({ lut, lutSampler: linearSampler, present: { bloom: 0.9, lutSize: size } }),
+      present.set({
+        lut,
+        lutSampler: linearSampler,
+        present: { bloom: 0.9, lutSize: size, agx: 0, exposure: 1 },
+      }),
   };
 }
 
@@ -154,7 +162,7 @@ export function bindGlints(passes: Passes, targets: Targets, pixelsPerUnit: numb
 export async function compilePasses(passes: Passes, targets: Targets, output: Surface): Promise<void> {
   const reflected = [passes.copy, passes.beam, passes.flare, passes.glass];
   await Promise.all([
-    ...[...passes.rainbows, passes.beam].map((pass) => pass.compile(targets.scene)),
+    ...[...passes.rainbows, passes.beam, passes.light].map((pass) => pass.compile(targets.scene)),
     ...reflected.map((pass) => pass.compile(targets.mirror[0])),
     ...[...reflected, passes.beamLine, passes.glints].map((pass) => pass.compile(targets.lit)),
     ...passes.mirror.map((down, i) => down.compile(targets.mirror[i + 1])),
