@@ -44,5 +44,5 @@ export function createSilhouette(vertices: readonly Vec3[]) {
     return best;
   };
 
-  return { update, intersect };
+  return { update, intersect, outline: (): readonly Point[] => hull };
 }
