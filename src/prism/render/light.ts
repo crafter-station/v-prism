@@ -13,9 +13,18 @@ const OPEN = 1e6;
 
 type Vec4 = readonly [number, number, number, number];
 
+const quads = (values: readonly number[]): Vec4[] =>
+  Array.from({ length: values.length / 4 }, (_, i) => [
+    values[i * 4],
+    values[i * 4 + 1],
+    values[i * 4 + 2],
+    values[i * 4 + 3],
+  ]);
+
 const EMPTY_FAN = {
   rays: Array.from({ length: PALETTE.length }, (): Vec4 => [0, 0, 1, 0]),
-  energy: Array.from({ length: PALETTE.length / 4 }, (): Vec4 => [0, 0, 0, 0]),
+  energy: quads(PALETTE.map(() => 0)),
+  links: quads(PALETTE.map(() => 0)),
   apex: [0, 0, 0, 0] as Vec4,
   bounds: [1, 0, 1, 0] as Vec4,
 };
@@ -60,12 +69,8 @@ function packFan(fan: Fan, reach: number) {
   const margin = open ? OPEN : spread + HALO_REACH * (WIDTH + reach * DIVERGENCE);
   return {
     rays: fan.rays,
-    energy: Array.from({ length: fan.energy.length / 4 }, (_, i): Vec4 => [
-      fan.energy[i * 4],
-      fan.energy[i * 4 + 1],
-      fan.energy[i * 4 + 2],
-      fan.energy[i * 4 + 3],
-    ]),
+    energy: quads(fan.energy),
+    links: quads(fan.links),
     apex: [...apex, margin, 0],
     bounds: [...low, ...high],
   };

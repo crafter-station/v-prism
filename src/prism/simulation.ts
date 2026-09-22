@@ -58,7 +58,7 @@ export interface Simulation {
 
 export function createSimulation(width: number, height: number): Simulation {
   const mesh = roundedTetrahedron(EDGE, BEVEL);
-  const silhouette = createSilhouette(mesh.vertices);
+  const silhouette = createSilhouette(mesh.vertices, mesh.centres);
   const glassSymmetry = symmetry();
   const drift = createDrift();
 
@@ -170,12 +170,13 @@ export function createSimulation(width: number, height: number): Simulation {
     const path: Vec3[] = entry
       ? [ray.start, entry.point, center]
       : [ray.start, vec3.add(ray.start, vec3.scale(direction, reach() * 2))];
+    const outline = silhouette.outline();
     const optics = physical
       ? traceLight(
-          silhouette.outline(),
+          outline,
           flat(ray.start),
           flat(direction),
-          entry && { point: flat(entry.point), normal: flat(entry.normal) },
+          entry && { point: flat(entry.point), normal: outline.normal(flat(entry.point)) },
           reach() * 2,
           (wavelength) => refractiveIndex(wavelength, tuning.ior, tuning.dispersion),
         )

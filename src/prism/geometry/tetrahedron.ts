@@ -8,6 +8,7 @@ export interface Mesh {
   readonly normals: Float32Array<ArrayBuffer>;
   readonly indices: Uint32Array<ArrayBuffer>;
   readonly vertices: readonly Vec3[];
+  readonly centres: readonly Vec3[];
 }
 
 export interface Symmetry {
@@ -114,5 +115,6 @@ export function roundedTetrahedron(edge: number, radius: number, segments = 16):
     normals: new Float32Array(normals.flat()),
     indices: new Uint32Array(indices),
     vertices,
+    centres,
   };
 }

@@ -1,3 +1,4 @@
+import type { Outline } from "../geometry/silhouette";
 import * as vec2 from "../math/vec2";
 import type { Vec2 } from "../math/vec2";
 import { SAMPLES, WAVELENGTHS } from "./spectrum";
@@ -18,6 +19,7 @@ export interface Beam {
 export interface Fan {
   readonly rays: readonly (readonly [number, number, number, number])[];
   readonly energy: readonly number[];
+  readonly links: readonly number[];
 }
 
 export interface Light {
@@ -34,6 +36,7 @@ interface Exit {
   readonly point: Vec2;
   readonly direction: Vec2;
   readonly energy: number;
+  readonly bounce: number;
 }
 
 export function fresnel(cosine: number, from: number, to: number): number {
@@ -47,7 +50,7 @@ export function fresnel(cosine: number, from: number, to: number): number {
 }
 
 export function traceLight(
-  outline: readonly Vec2[],
+  outline: Outline,
   start: Vec2,
   direction: Vec2,
   entry: Contact | null,
@@ -72,7 +75,7 @@ export function traceLight(
   return { beams: [incoming, reflection, ...inside], fans: gather(paths.map((p) => p.exits)) };
 }
 
-function walk(outline: readonly Vec2[], entry: Contact, direction: Vec2, n: number) {
+function walk(outline: Outline, entry: Contact, direction: Vec2, n: number) {
   const exits: Exit[] = [];
   const segments: Beam[] = [];
   let point = entry.point;
@@ -85,7 +88,7 @@ function walk(outline: readonly Vec2[], entry: Contact, direction: Vec2, n: numb
     const out = vec2.refract(ray, vec2.scale(hit.normal, -1), n);
     if (out) {
       const reflected = fresnel(vec2.dot(ray, hit.normal), n, 1);
-      exits.push({ point: hit.point, direction: out, energy: energy * (1 - reflected) });
+      exits.push({ point: hit.point, direction: out, energy: energy * (1 - reflected), bounce });
       energy *= reflected;
     }
     point = hit.point;
@@ -94,33 +97,44 @@ function walk(outline: readonly Vec2[], entry: Contact, direction: Vec2, n: numb
   return { exits, segments };
 }
 
-function leave(outline: readonly Vec2[], point: Vec2, direction: Vec2): Contact | null {
+function leave(outline: Outline, point: Vec2, direction: Vec2): Contact | null {
+  const { points } = outline;
   let nearest = Infinity;
-  let normal: Vec2 = [0, 0];
-  for (let i = 0; i < outline.length; i++) {
-    const a = outline[i];
-    const b = outline[(i + 1) % outline.length];
+  for (let i = 0; i < points.length; i++) {
+    const a = points[i];
+    const b = points[(i + 1) % points.length];
     const edge = vec2.normalize([b[1] - a[1], a[0] - b[0]]);
     const facing = vec2.dot(direction, edge);
     if (facing <= 1e-9) continue;
     const t = vec2.dot(vec2.sub(a, point), edge) / facing;
-    if (t > 1e-6 && t < nearest) {
-      nearest = t;
-      normal = edge;
-    }
+    if (t > 1e-6 && t < nearest) nearest = t;
   }
-  return nearest < Infinity ? { point: vec2.add(point, vec2.scale(direction, nearest)), normal } : null;
+  if (nearest === Infinity) return null;
+  const exit = vec2.add(point, vec2.scale(direction, nearest));
+  return { point: exit, normal: outline.normal(exit) };
 }
 
 function gather(exits: readonly (readonly Exit[])[]): Fan[] {
   const fans: Fan[] = [];
   for (let order = 0; order < FANS; order++) {
     const nth = exits.map((path) => path[order]);
-    const any = nth.find(Boolean);
-    if (!any) break;
+    if (!nth.some(Boolean)) break;
+    const nearest = (i: number): Exit => {
+      for (let step = 1; ; step++) {
+        const exit = nth[i - step] ?? nth[i + step];
+        if (exit) return exit;
+      }
+    };
     fans.push({
-      rays: nth.map(({ point, direction } = any) => [point[0], point[1], direction[0], direction[1]]),
+      rays: nth.map((exit, i) => {
+        const { point, direction } = exit ?? nearest(i);
+        return [point[0], point[1], direction[0], direction[1]];
+      }),
       energy: nth.map((exit) => exit?.energy ?? 0),
+      links: nth.map((exit, i) => {
+        const next = nth[i + 1];
+        return exit && next && exit.bounce === next.bounce ? 1 : 0;
+      }),
     });
   }
   return fans;

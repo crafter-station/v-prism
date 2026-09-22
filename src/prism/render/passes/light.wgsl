@@ -4,6 +4,8 @@ const BEAMS = 8;
 const FAR = 1e4;
 const HALO = 0.02;
 const HALO_WIDTH = 5.0;
+const SLOPE = 1.702;
+const DENSITY = 0.4255;
 
 struct Beam {
   ray: vec4f,
@@ -13,6 +15,7 @@ struct Beam {
 struct Fan {
   rays: array<vec4f, 32>,
   energy: array<vec4f, 8>,
+  links: array<vec4f, 8>,
   apex: vec4f,
   bounds: vec4f,
 }
@@ -46,6 +49,25 @@ fn glow(p: vec2f, ray: vec4f, length: f32) -> f32 {
   return profile * ends * light.shape.x / width;
 }
 
+fn cdf(x: f32) -> f32 {
+  return 1.0 / (1.0 + exp(-SLOPE * x));
+}
+
+fn slab(near: f32, far: f32) -> f32 {
+  return abs(cdf(near) - cdf(far)) / max(abs(near - far), 1e-3) / DENSITY;
+}
+
+fn band(p: vec2f, a: vec4f, b: vec4f, first: vec3f, second: vec3f) -> vec3f {
+  let offset = p - a.xy;
+  let along = dot(offset, a.zw);
+  let width = light.shape.x + max(along, 0.0) * light.shape.y;
+  let near = cross2(a.zw, offset) / width;
+  let far = cross2(b.zw, p - b.xy) / width;
+  let profile = slab(near, far) + HALO * slab(near / HALO_WIDTH, far / HALO_WIDTH);
+  let t = clamp(near / (near - far + select(1e-6, -1e-6, near < far)), 0.0, 1.0);
+  return mix(first, second, t) * profile * smoothstep(-width, width, along) * light.shape.x / width;
+}
+
 fn spectrum(p: vec2f, f: i32) -> vec3f {
   let apex = light.fans[f].apex;
   let bounds = light.fans[f].bounds;
@@ -54,11 +76,16 @@ fn spectrum(p: vec2f, f: i32) -> vec3f {
     return vec3f(0.0);
   }
   var color = vec3f(0.0);
-  for (var i = 0; i < RAYS; i++) {
-    let energy = light.fans[f].energy[i / 4][i % 4];
-    if (energy > 0.0) {
-      color += palette.colors[i].rgb * energy * glow(p, light.fans[f].rays[i], FAR);
+  var a = light.fans[f].rays[0];
+  var tint = palette.colors[0].rgb * light.fans[f].energy[0][0];
+  for (var i = 1; i < RAYS; i++) {
+    let b = light.fans[f].rays[i];
+    let next = palette.colors[i].rgb * light.fans[f].energy[i / 4][i % 4];
+    if (light.fans[f].links[(i - 1) / 4][(i - 1) % 4] > 0.5 && dot(a.zw, b.zw) > 0.0) {
+      color += band(p, a, b, tint, next);
     }
+    a = b;
+    tint = next;
   }
   return color;
 }
