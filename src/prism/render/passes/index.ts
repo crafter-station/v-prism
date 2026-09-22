@@ -129,7 +129,7 @@ export function bindTargets(passes: Passes, targets: Targets, radius: number): v
 
 export async function compilePasses(passes: Passes, targets: Targets, output: Surface): Promise<void> {
   await Promise.all([
-    ...passes.rainbows.map((rainbow) => rainbow.compile(targets.scene)),
+    ...[...passes.rainbows, passes.beam].map((pass) => pass.compile(targets.scene)),
     ...[passes.copy, passes.beam, passes.beamLine, passes.flare, passes.glass].map((pass) =>
       pass.compile(targets.lit),
     ),

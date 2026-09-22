@@ -115,7 +115,7 @@ function render({ gpu, output, targets, passes }: Stage, state: FrameState): voi
   const tuning = settings.get();
   const viewProjection = state.camera.viewProjection;
   const background = backgroundColor();
-  const beamCount = writeBeam(passes, state);
+  const beam = writeBeam(passes, state);
   const beamDraw = state.light ? passes.beamLine : passes.beam;
   const glare = 1 / state.camera.factor;
   beamDraw.set({
@@ -178,10 +178,12 @@ function render({ gpu, output, targets, passes }: Stage, state: FrameState): voi
       state.rainbows.forEach((rainbow, i) => {
         if (rainbow.intensity > 0.001) pass.draw(passes.rainbows[i]);
       });
+      if (!state.light) pass.draw(passes.beam, { instances: beam.streaks });
     });
     current.pass({ target: targets.lit, clear: [...background, 1] }, (pass) => {
       pass.draw(passes.copy);
-      pass.draw(beamDraw, { instances: beamCount });
+      if (state.light) pass.draw(passes.beamLine, { instances: beam.streaks });
+      else pass.draw(passes.beam, { firstInstance: beam.streaks, instances: beam.glows });
       if (state.hit) pass.draw(passes.flare);
       pass.draw(passes.glass);
     });
@@ -195,7 +197,7 @@ function render({ gpu, output, targets, passes }: Stage, state: FrameState): voi
   });
 }
 
-function writeBeam(passes: Passes, state: FrameState): number {
+function writeBeam(passes: Passes, state: FrameState): { readonly streaks: number; readonly glows: number } {
   const { data } = passes.beamSprites;
   let count = 0;
   const put = (center: Vec3, size: readonly [number, number], angle: number, kind: number) => {
@@ -208,9 +210,10 @@ function writeBeam(passes: Passes, state: FrameState): number {
     const d = vec3.sub(b, a);
     put(vec3.scale(vec3.add(a, b), 0.5), [vec3.length(d), LINE_WIDTH], Math.atan2(d[1], d[0]), 0);
   }
+  const streaks = count;
   for (let i = 1; i + 1 < state.path.length; i++) put(state.path[i], [JOINT_SIZE, JOINT_SIZE], 0, 1);
   passes.beamSprites.write(count);
-  return count;
+  return { streaks, glows: count - streaks };
 }
 
 function writeFlare(passes: Passes): void {
