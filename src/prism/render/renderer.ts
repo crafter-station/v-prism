@@ -1,4 +1,4 @@
-import { frame, init, surface, type Gpu, type Surface } from "vgpu";
+import { frame, init, surface, type FramePass, type Gpu, type Surface } from "vgpu";
 import * as vec3 from "../math/vec3";
 import type { Vec3 } from "../math/vec3";
 import {
@@ -11,8 +11,8 @@ import {
 import { prism } from "../state/prism";
 import { settings } from "../state/settings";
 import { loadLut } from "./lut";
-import { bindTargets, compilePasses, createPasses, type Passes } from "./passes";
-import { BLOOM_LEVELS, createTargets, type Targets } from "./targets";
+import { bindGlints, bindTargets, compilePasses, createPasses, type Passes } from "./passes";
+import { BLOOM_LEVELS, createTargets, MIRROR_LEVELS, type Targets } from "./targets";
 
 const LINE_WIDTH = 10 / 64;
 const JOINT_SIZE = 0.75;
@@ -69,7 +69,7 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
     const output = surface(gpu, canvas, { dpr: [1, 2] });
     const simulation = createSimulation(canvas.clientWidth, canvas.clientHeight);
     const targets = createTargets(gpu, output.size);
-    const passes = createPasses(gpu, simulation.mesh, BLOOM_LEVELS);
+    const passes = createPasses(gpu, simulation.mesh, BLOOM_LEVELS, MIRROR_LEVELS);
     bindTargets(passes, targets, BLOOM_RADIUS);
     passes.useLut(await loadLut(gpu, LUT_URL), LUT_SIZE);
     await compilePasses(passes, targets, output);
@@ -117,6 +117,7 @@ function render({ gpu, output, targets, passes }: Stage, state: FrameState): voi
   const background = backgroundColor();
   const beam = writeBeam(passes, state);
   const beamDraw = state.light ? passes.beamLine : passes.beam;
+  const glints = tuning.glints * (1 - tuning.roughness);
   const glare = 1 / state.camera.factor;
   beamDraw.set({
     beam: {
@@ -161,6 +162,8 @@ function render({ gpu, output, targets, passes }: Stage, state: FrameState): voi
       dispersion: 0.012,
     },
   });
+  passes.glints.set({ glints: { viewProjection, model: state.model, strength: glints } });
+  bindGlints(passes, targets, (state.camera.zoom * targets.scene.size[0]) / state.camera.width);
   passes.flare.set({
     flare: {
       viewProjection,
@@ -173,6 +176,14 @@ function render({ gpu, output, targets, passes }: Stage, state: FrameState): voi
   });
   passes.present.set({ present: { bloom: tuning.bloom } });
 
+  const view = (pass: FramePass) => {
+    pass.draw(passes.copy);
+    if (state.light) pass.draw(passes.beamLine, { instances: beam.streaks });
+    else pass.draw(passes.beam, { firstInstance: beam.streaks, instances: beam.glows });
+    if (state.hit) pass.draw(passes.flare);
+    pass.draw(passes.glass);
+  };
+
   frame(gpu, (current) => {
     current.pass({ target: targets.scene, clear: [...background, 1] }, (pass) => {
       state.rainbows.forEach((rainbow, i) => {
@@ -180,12 +191,15 @@ function render({ gpu, output, targets, passes }: Stage, state: FrameState): voi
       });
       if (!state.light) pass.draw(passes.beam, { instances: beam.streaks });
     });
+    if (glints > 0) {
+      current.pass({ target: targets.mirror[0], clear: [...background, 1] }, view);
+      passes.mirror.forEach((down, i) => {
+        current.pass({ target: targets.mirror[i + 1] }, (pass) => pass.draw(down));
+      });
+    }
     current.pass({ target: targets.lit, clear: [...background, 1] }, (pass) => {
-      pass.draw(passes.copy);
-      if (state.light) pass.draw(passes.beamLine, { instances: beam.streaks });
-      else pass.draw(passes.beam, { firstInstance: beam.streaks, instances: beam.glows });
-      if (state.hit) pass.draw(passes.flare);
-      pass.draw(passes.glass);
+      view(pass);
+      if (glints > 0) pass.draw(passes.glints);
     });
     targets.down.forEach((level, i) => {
       current.pass({ target: level }, (pass) => pass.draw(i === 0 ? passes.extract : passes.down[i - 1]));

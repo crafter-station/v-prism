@@ -25,6 +25,7 @@ const LIGHT_SLIDERS: readonly Slider[] = [
 
 const GLASS_SLIDERS: readonly Slider[] = [
   { id: "reflections", label: "Reflections", min: 0, max: 3, step: 0.05 },
+  { id: "glints", label: "Glints", min: 0, max: 10, step: 0.1 },
   { id: "roughness", label: "Roughness", min: 0, max: 1, step: 0.01 },
   { id: "ior", label: "Refraction", min: 1, max: 2.33, step: 0.01 },
   { id: "thickness", label: "Thickness", min: 0, max: 3, step: 0.05 },
