@@ -42,8 +42,9 @@ Everything is a `draw()` or `effect()` from vgpu, encoded into one `frame()` per
 
 | Pass | Target | Draws |
 | --- | --- | --- |
-| Scene | `scene` (rgba16float) | background clear, up to two rainbow quads (premultiplied); this is what the glass refracts |
-| Glass | `lit` (rgba16float, 4x MSAA) | copy of `scene`, beam sprites and lens flare (additive), then the glass, which covers them |
+| Scene | `scene` (rgba16float) | background clear, up to two rainbow quads (premultiplied), the beam streak (additive); this is what the glass refracts |
+| Mirror | 5 levels, 1/2 to 1/32 res | the frame without glints (scene, beam glows, flare, glass), then a 13-tap downsample chain; this is what the glass reflects |
+| Glass | `lit` (rgba16float, 4x MSAA) | copy of `scene`, beam glows and lens flare (additive), the glass, which covers them, then its glints (additive) |
 | Bloom | 9 half-res levels | `smoothstep(1, 2, luminance)` threshold, 13-tap downsample chain, tent upsample mixed at 0.85 per level |
 | Present | canvas | `lit` + bloom, clipped, through the F-6800 film LUT (a 33³ `texture_3d`), to sRGB |
 
@@ -53,6 +54,19 @@ reflects a procedural studio evaluated analytically per direction (a gradient do
 panels; the light preset uses the original three softboxes), and mixes them with a dielectric
 Fresnel plus a clearcoat term. There is no tone mapping, which is what the original pipeline did:
 it clipped, applied the LUT, and encoded to sRGB.
+
+The glints port the WebGL build's screen-space reflections, which gave the glass its grainy
+rainbow sheen. Each glass pixel bends its normal by a jitter of 0.7, steps half a unit along the
+reflected ray, and reads the blurred mirror there, with the reflection's own Fresnel (IOR 2.09),
+then squares the result at intensity 2.5, as the original did. The original averaged hundreds of
+jittered rays over time; here eight stratified rays read an already blurred level, which gives
+the same soft glow and fine grain in a single frame with no history. The mirror level follows the
+pixel density, so the glow keeps its size on a phone, at 1x or 2x, and at any zoom. The light
+preset turns them off, as the original did.
+
+The glass itself is built analytically: four flat faces, six cylindrical fillets and four
+spherical corner caps that share their seam points, so the mesh is watertight and has no sliver
+triangles along the rounded edges.
 
 Glare matches the original lens-flare textures without shipping them: `shaders/glare.wgsl`
 holds each texture's measured brightness curve (radial for the glows and flare dots, along and
