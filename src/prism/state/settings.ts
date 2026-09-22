@@ -12,6 +12,8 @@ export interface Settings {
   readonly ior: number;
   readonly thickness: number;
   readonly drift: number;
+  readonly physical: boolean;
+  readonly dispersion: number;
 }
 
 export const DARK: Settings = {
@@ -26,9 +28,20 @@ export const DARK: Settings = {
   ior: 1.5,
   thickness: 0.9,
   drift: 1,
+  physical: false,
+  dispersion: 1,
 };
 
 export const LIGHT: Settings = { ...DARK, background: "#ffffff", reflections: 1, glints: 0 };
+
+export const REAL: Settings = {
+  ...DARK,
+  physical: true,
+  ior: 1.6,
+  rainbow: 3,
+  bloom: 0.45,
+  reflections: 0.3,
+};
 
 export const settings = createStore<Settings>(DARK);
 

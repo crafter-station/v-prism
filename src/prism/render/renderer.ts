@@ -1,6 +1,7 @@
 import { frame, init, surface, type FramePass, type Gpu, type Surface } from "vgpu";
 import * as vec3 from "../math/vec3";
 import type { Vec3 } from "../math/vec3";
+import { chromaticSpread } from "../optics/spectrum";
 import {
   backgroundColor,
   createSimulation,
@@ -10,6 +11,7 @@ import {
 } from "../simulation";
 import { prism } from "../state/prism";
 import { settings } from "../state/settings";
+import { packLight } from "./light";
 import { loadLut } from "./lut";
 import { bindGlints, bindTargets, compilePasses, createPasses, type Passes } from "./passes";
 import { BLOOM_LEVELS, createTargets, MIRROR_LEVELS, type Targets } from "./targets";
@@ -23,6 +25,8 @@ const LIGHT_LINE: Vec3 = [0.133, 0.133, 0.133];
 const LUT_URL = "/lut/F-6800-STD.ktx2";
 const LUT_SIZE = 33;
 const BLOOM_RADIUS = 0.85;
+const STAGE_DISPERSION = 0.012;
+const EXPOSURE = 1.2;
 
 export interface Renderer {
   readonly ready: Promise<void>;
@@ -159,7 +163,9 @@ function render({ gpu, output, targets, passes }: Stage, state: FrameState): voi
       lightDirection: state.lightDirection,
       lightIntensity: state.lightIntensity,
       ambient: vec3.scale([1, 1, 1], state.ambient * 0.5),
-      dispersion: 0.012,
+      dispersion: state.optics
+        ? chromaticSpread(tuning.dispersion) / Math.max(0.01, tuning.ior - 1)
+        : STAGE_DISPERSION,
     },
   });
   passes.glints.set({ glints: { viewProjection, model: state.model, strength: glints } });
@@ -174,7 +180,10 @@ function render({ gpu, output, targets, passes }: Stage, state: FrameState): voi
       intensity: state.hit ? 1 : 0,
     },
   });
-  passes.present.set({ present: { bloom: tuning.bloom } });
+  if (state.optics) passes.light.set({ light: packLight(state.optics, state.camera, tuning.rainbow) });
+  passes.present.set({
+    present: { bloom: tuning.bloom, agx: state.optics ? 1 : 0, exposure: EXPOSURE },
+  });
 
   const view = (pass: FramePass) => {
     pass.draw(passes.copy);
@@ -186,6 +195,7 @@ function render({ gpu, output, targets, passes }: Stage, state: FrameState): voi
 
   frame(gpu, (current) => {
     current.pass({ target: targets.scene, clear: [...background, 1] }, (pass) => {
+      if (state.optics) return pass.draw(passes.light);
       state.rainbows.forEach((rainbow, i) => {
         if (rainbow.intensity > 0.001) pass.draw(passes.rainbows[i]);
       });

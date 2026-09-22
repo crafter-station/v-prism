@@ -3,7 +3,7 @@
 import { useEffect, type ReactNode } from "react";
 import type { Vec3 } from "../math/vec3";
 import { prism, resetView, setDrawerOpen, setRotation, setZoom } from "../state/prism";
-import { DARK, LIGHT, settings, type Settings } from "../state/settings";
+import { DARK, LIGHT, REAL, settings, type Settings } from "../state/settings";
 import { useStore } from "../state/store";
 import styles from "./drawer.module.css";
 
@@ -31,6 +31,14 @@ const GLASS_SLIDERS: readonly Slider[] = [
   { id: "thickness", label: "Thickness", min: 0, max: 3, step: 0.05 },
 ];
 
+const DISPERSION: Slider = { id: "dispersion", label: "Dispersion", min: 0, max: 4, step: 0.05 };
+
+const PRESETS = [
+  { name: "Dark", settings: DARK },
+  { name: "Light", settings: LIGHT },
+  { name: "Real", settings: REAL },
+] as const;
+
 const AXES = ["Tilt", "Turn", "Spin"];
 
 export function Drawer() {
@@ -38,7 +46,8 @@ export function Drawer() {
   const rotation = useStore(prism, (s) => s.rotation);
   const zoom = useStore(prism, (s) => s.zoom);
   const tuning = useStore(settings, (s) => s);
-  const light = tuning.background === LIGHT.background;
+  const preset = tuning.physical ? REAL : tuning.background === LIGHT.background ? LIGHT : DARK;
+  const glassSliders = tuning.physical ? [...GLASS_SLIDERS, DISPERSION] : GLASS_SLIDERS;
 
   useEffect(() => {
     if (!open) return;
@@ -74,22 +83,32 @@ export function Drawer() {
         </div>
 
         <div className={styles.segments} role="group" aria-label="Preset">
-          <button type="button" aria-pressed={!light} onClick={() => settings.set(DARK)}>
-            Dark
-          </button>
-          <button type="button" aria-pressed={light} onClick={() => settings.set(LIGHT)}>
-            Light
-          </button>
+          {PRESETS.map(({ name, settings: values }) => (
+            <button
+              key={name}
+              type="button"
+              aria-pressed={preset === values}
+              onClick={() => settings.set(values)}
+            >
+              {name}
+            </button>
+          ))}
         </div>
 
         <Section title="Light">
-          {LIGHT_SLIDERS.map(({ id, ...s }) => (
-            <Range key={id} {...s} value={tuning[id]} onChange={(v) => patch(id, v)} />
+          {LIGHT_SLIDERS.map(({ id, label, ...s }) => (
+            <Range
+              key={id}
+              {...s}
+              label={tuning.physical && id === "rainbow" ? "Beam" : label}
+              value={tuning[id]}
+              onChange={(v) => patch(id, v)}
+            />
           ))}
         </Section>
 
         <Section title="Glass">
-          {GLASS_SLIDERS.map(({ id, ...s }) => (
+          {glassSliders.map(({ id, ...s }) => (
             <Range key={id} {...s} value={tuning[id]} onChange={(v) => patch(id, v)} />
           ))}
           <div className={styles.swatches}>
@@ -132,7 +151,7 @@ export function Drawer() {
             type="button"
             className={styles.reset}
             onClick={() => {
-              settings.set(light ? LIGHT : DARK);
+              settings.set(preset);
               resetView();
             }}
           >

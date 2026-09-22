@@ -4,10 +4,13 @@ import { clamp, gap, lerp } from "./math/angle";
 import { compose, type Mat4 } from "./math/mat4";
 import * as quat from "./math/quat";
 import type { Quat } from "./math/quat";
+import type { Vec2 } from "./math/vec2";
 import * as vec3 from "./math/vec3";
 import type { Vec3 } from "./math/vec3";
 import { createDrift } from "./optics/drift";
 import { rainbowBeams } from "./optics/rainbow";
+import { refractiveIndex } from "./optics/spectrum";
+import { traceLight, type Light } from "./optics/trace";
 import { createCamera, MOBILE, toWorld, type Camera } from "./scene/camera";
 import { orientation, prism } from "./state/prism";
 import { isLight, linear, settings } from "./state/settings";
@@ -19,6 +22,9 @@ const BASE_Z = 0.1;
 const BEAM_LENGTH = 10;
 const INRADIUS = (EDGE * Math.sqrt(2 / 3)) / 4;
 const DEFAULT_RAY = { start: [-10, -0.05, 0] as Vec3, end: [0, 0, 0] as Vec3 };
+const APEX = Math.PI / 3;
+
+const flat = ([x, y]: Vec3): Vec2 => [x, y];
 
 export interface RainbowFrame {
   readonly angle: number;
@@ -39,6 +45,7 @@ export interface FrameState {
   readonly ambient: number;
   readonly time: number;
   readonly light: boolean;
+  readonly optics: Light | null;
 }
 
 export interface Simulation {
@@ -62,6 +69,7 @@ export function createSimulation(width: number, height: number): Simulation {
   let ray = { ...DEFAULT_RAY, active: false };
   let lastAim = prism.get().aim;
   let lastRotation = prism.get().rotation;
+  let physical = settings.get().physical;
   let hit = false;
   let hasBeenHit = false;
   let rainbowTime = 0;
@@ -83,6 +91,14 @@ export function createSimulation(width: number, height: number): Simulation {
 
   const reach = () => Math.max(BEAM_LENGTH, Math.hypot(camera.width, camera.height) / camera.zoom);
 
+  const resting = (length = reach()) => {
+    if (!physical) return { ...DEFAULT_RAY, start: vec3.scale(vec3.normalize(DEFAULT_RAY.start), length) };
+    const incidence = Math.asin(Math.min(0.99, settings.get().ior * Math.sin(APEX / 2)));
+    const angle = incidence - APEX / 2;
+    const end = centerOf();
+    return { start: vec3.sub(end, vec3.scale([Math.cos(angle), Math.sin(angle), 0], length)), end };
+  };
+
   const aim = (x: number, y: number) => {
     const [wx, wy] = toWorld(camera, x, y);
     const [cx, cy] = centerOf();
@@ -102,8 +118,7 @@ export function createSimulation(width: number, height: number): Simulation {
     camera = createCamera(size[0], size[1], zoomFactor);
     const a = prism.get().aim;
     if (a) aim(a.x, a.y);
-    else if (ray.active)
-      ray = { ...DEFAULT_RAY, start: vec3.scale(vec3.normalize(DEFAULT_RAY.start), reach()), active: true };
+    else if (ray.active) ray = { ...resting(), active: true };
     restless = true;
   };
 
@@ -117,7 +132,12 @@ export function createSimulation(width: number, height: number): Simulation {
     const tuning = settings.get();
     if (armedAt < 0) armedAt = now + 1;
     if (!ray.active && now >= armedAt) {
-      ray = { ...DEFAULT_RAY, active: true };
+      ray = { ...resting(physical ? reach() : BEAM_LENGTH), active: true };
+      restless = true;
+    }
+    if (tuning.physical !== physical) {
+      physical = tuning.physical;
+      if (!state.aim && ray.active) ray = { ...resting(), active: true };
       restless = true;
     }
     if (state.aim !== lastAim && state.aim) {
@@ -150,8 +170,24 @@ export function createSimulation(width: number, height: number): Simulation {
     const path: Vec3[] = entry
       ? [ray.start, entry.point, center]
       : [ray.start, vec3.add(ray.start, vec3.scale(direction, reach() * 2))];
+    const optics = physical
+      ? traceLight(
+          silhouette.outline(),
+          flat(ray.start),
+          flat(direction),
+          entry && { point: flat(entry.point), normal: flat(entry.normal) },
+          reach() * 2,
+          (wavelength) => refractiveIndex(wavelength, tuning.ior, tuning.dispersion),
+        )
+      : null;
 
-    if (entry) {
+    if (entry && optics) {
+      hasBeenHit = true;
+      shares[0] = 1;
+      shares[1] = 0;
+      const [, , x, y] = optics.fans[0]?.rays[optics.fans[0].rays.length >> 1] ?? [0, 0, 1, 0];
+      spotTarget = vec3.lerp(spotTarget, [x, y, 0], 0.05);
+    } else if (entry) {
       if (!wasHit) {
         rainbowSpeed = 1;
         emissive[0] = hasBeenHit ? 3 : 2.5 * (reducedMotion ? 1 : 20);
@@ -186,7 +222,7 @@ export function createSimulation(width: number, height: number): Simulation {
     const animating =
       restless ||
       drift.moving() ||
-      (hit && rainbowSpeed > 0.001) ||
+      (hit && !physical && rainbowSpeed > 0.001) ||
       quat.angleBetween(pose, target) > 1e-4 ||
       Math.abs(emissive[0] - (hit ? tuning.rainbow * shares[0] : 0)) > 0.001 ||
       Math.abs(ambient - (ray.active ? tuning.ambient : 0)) > 0.001 ||
@@ -208,6 +244,7 @@ export function createSimulation(width: number, height: number): Simulation {
       ambient,
       time: rainbowTime,
       light: isLight(tuning.background),
+      optics,
     };
   };
 

@@ -94,7 +94,8 @@
 
 .segments {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-auto-columns: 1fr;
+  grid-auto-flow: column;
   margin-bottom: 28px;
   border: 1px solid var(--line);
   border-radius: 8px;
