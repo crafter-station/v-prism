@@ -75,6 +75,30 @@ nothing ever ends in a visible square. Glare lives in the lens, not the scene, s
 the beam's glint and width keep their on-screen size at any zoom; like the original, the glass
 hides whatever glare falls behind it.
 
+### Real light
+
+The Dark and Light presets keep the original's stylised rainbow. The Real preset replaces it with
+traced light:
+
+- **Glass.** A dense flint with n = 1.6 at the sodium D line and SF11's dispersion curve from its
+  Sellmeier equation (Abbe number about 20). SF11 itself (n = 1.785) is so dense that a 60° prism
+  totally reflects almost every beam; this keeps the physics and gives the spectrum room to exist.
+- **Rays.** The beam enters the prism's live outline, and 32 wavelengths from 390 to 700 nm each
+  refract by Snell's law. At every face a ray either reflects totally or splits by Fresnel's
+  equations into light that leaves and a ghost that stays inside, up to four bounces. The reflection
+  off the entry face and the ghosts are drawn too.
+- **Beams in haze.** Every beam and every wavelength is a Gaussian beam that widens slightly and dims
+  as it spreads, so the colours overlap into white at the exit face and separate with distance.
+- **Colour.** Each wavelength's colour comes from the CIE 1931 observer (the Wyman, Sloan and
+  Shirley fit) under 6504 K daylight, converted to Rec.709 and white-balanced. Spectral colours sit
+  outside sRGB, so the present pass clips them and pulls their luminance halfway back to the true
+  value, which keeps violet dim the way a camera records it, then tone maps with AgX instead of the
+  film LUT.
+
+The beam rests at minimum deviation, rising into the prism with the spectrum falling out of it.
+Aim anywhere else and the physics decides: most angles totally reflect inside and leave as white
+light, and only the right ones throw a spectrum.
+
 The camera is an orthographic, pixel-space camera sized in CSS pixels (50 / 70 / 100 px per
 world unit by breakpoint, times the zoom); render targets follow the device pixel size, so a
 2x display renders at 2x without changing the framing. On resize every offscreen target is
@@ -100,10 +124,11 @@ src/prism/render/renderer.ts  vgpu context, surface, frame scheduling, resize, u
 src/prism/render/passes/    one WGSL file per pass and the TypeScript that binds it
 src/prism/render/shaders/   shared WGSL modules: studio environment, spectrum, glare curves
 src/prism/render/targets.ts render targets and the bloom chain
+src/prism/render/light.ts   packs traced light into the light pass's uniforms
 src/prism/render/lut.ts     KTX2 reader for the film LUT
 src/prism/render/support.ts why WebGPU is unavailable, when it is
 src/prism/geometry/         rounded regular tetrahedron, its 24 symmetries, screen-space outline
-src/prism/optics/           symmetric rainbow optics (the original formula in prism space), drift
+src/prism/optics/           symmetric rainbow optics, drift, and the Real preset's spectrum and ray tracer
 src/prism/math/             vec3, quat, mat4, angles, 2D convex hull
 src/prism/state/            small store + settings and prism state (used by React and the renderer)
 src/prism/ui/               drawer, hint, GitHub link, still-frame fallback
